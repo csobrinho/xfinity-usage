@@ -76,4 +76,5 @@ func main() {
 	if err := run(ctx); err != nil {
 		log.Fatalf("main: %v", err)
 	}
+	log.Println("main: all done ✅")
 }
