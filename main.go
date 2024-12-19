@@ -24,6 +24,7 @@ func init() {
 
 	flag.StringVar(&cfg.clientSecret, "client_secret", os.Getenv("CLIENT_SECRET"), "OAuth client secret")
 	flag.StringVar(&cfg.refreshToken, "refresh_token", os.Getenv("REFRESH_TOKEN"), "OAuth refresh token")
+	flag.StringVar(&cfg.applicationID, "application_id", os.Getenv("APPLICATION_ID"), "OAuth application id")
 	flag.StringVar(&cfg.mqttURL, "mqtt_url", os.Getenv("MQTT_URL"), "MQTT url")
 	flag.StringVar(&cfg.mqttUsername, "mqtt_username", os.Getenv("MQTT_USERNAME"), "MQTT username")
 	flag.StringVar(&cfg.mqttPassword, "mqtt_password", os.Getenv("MQTT_PASSWORD"), "MQTT password")
@@ -38,7 +39,7 @@ func run(ctx context.Context) error {
 
 	client := &http.Client{Timeout: cfg.timeout}
 
-	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret)
+	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
 	if err != nil {
 		return fmt.Errorf("failed to refresh token: %w", err)
 	}

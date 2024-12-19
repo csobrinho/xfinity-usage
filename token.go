@@ -26,12 +26,16 @@ var (
 	}
 )
 
-func tokenRequest(ctx context.Context, client *http.Client, refreshToken, clientID, clientSecret string) (*oauth2.Token, error) {
+func tokenRequest(ctx context.Context, client *http.Client, refreshToken, clientID, clientSecret, applicationID string) (*oauth2.Token, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
 	data.Set("client_id", clientID)
 	data.Set("client_secret", clientSecret)
+	if applicationID != "" {
+		data.Set("application_id", applicationID)
+	}
+
 	for key, value := range tokenExtraValues {
 		data.Set(key, value)
 	}

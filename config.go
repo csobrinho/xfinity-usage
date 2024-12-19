@@ -10,6 +10,7 @@ type config struct {
 	clientID       string
 	clientSecret   string
 	refreshToken   string
+	applicationID  string
 	mqttURL        string
 	mqttClientID   string
 	mqttStateTopic string
