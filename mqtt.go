@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strconv"
 
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/paho"
@@ -59,7 +58,7 @@ func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttC
 		Topic:   mqttStateTopic,
 		Retain:  true,
 		QoS:     1,
-		Payload: []byte(strconv.FormatFloat(float64(usage), 'f', -1, 64)),
+		Payload: []byte(fmt.Sprintf("%.2f", usage)),
 	})
 	return err
 }
