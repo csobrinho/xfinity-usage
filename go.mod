@@ -4,7 +4,7 @@ go 1.23.2
 
 require (
 	github.com/eclipse/paho.golang v0.22.0
-	golang.org/x/oauth2 v0.24.0
+	golang.org/x/oauth2 v0.25.0
 )
 
 require (
