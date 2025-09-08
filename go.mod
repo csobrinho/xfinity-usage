@@ -3,7 +3,7 @@ module github.com/csobrinho/xfinity-usage
 go 1.23.2
 
 require (
-	github.com/eclipse/paho.golang v0.22.0
+	github.com/eclipse/paho.golang v0.23.0
 	golang.org/x/oauth2 v0.30.0
 )
 
