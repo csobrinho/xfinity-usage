@@ -1,6 +1,8 @@
 module github.com/csobrinho/xfinity-usage
 
-go 1.23.2
+go 1.24.0
+
+toolchain go1.24.5
 
 require (
 	github.com/eclipse/paho.golang v0.23.0
@@ -9,5 +11,5 @@ require (
 
 require (
 	github.com/gorilla/websocket v1.5.3 // indirect
-	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 )
