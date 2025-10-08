@@ -6,7 +6,7 @@ toolchain go1.25.2
 
 require (
 	github.com/eclipse/paho.golang v0.23.0
-	golang.org/x/oauth2 v0.31.0
+	golang.org/x/oauth2 v0.32.0
 )
 
 require (
