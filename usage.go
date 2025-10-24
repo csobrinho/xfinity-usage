@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 var (
@@ -77,8 +79,8 @@ func (u UsageValue) GB() (float32, error) {
 	}
 }
 
-func internetDataUsageRequest(ctx context.Context, client *http.Client, accessToken string) (*Usage, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", usageURL, strings.NewReader(usageBody))
+func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client, accessToken string) (*Usage, error) {
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", usageURL, strings.NewReader(usageBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"golang.org/x/oauth2"
 )
 
@@ -26,7 +27,7 @@ var (
 	}
 )
 
-func tokenRequest(ctx context.Context, client *http.Client, refreshToken, clientID, clientSecret, applicationID string) (*oauth2.Token, error) {
+func tokenRequest(ctx context.Context, client *retryablehttp.Client, refreshToken, clientID, clientSecret, applicationID string) (*oauth2.Token, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
@@ -39,7 +40,7 @@ func tokenRequest(ctx context.Context, client *http.Client, refreshToken, client
 	for key, value := range tokenExtraValues {
 		data.Set(key, value)
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

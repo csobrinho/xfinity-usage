@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 const (
@@ -17,7 +18,7 @@ const (
 )
 
 func init() {
-	flag.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "timeout in seconds")
+	flag.DurationVar(&cfg.timeout, "timeout", 90*time.Second, "timeout in seconds")
 	flag.StringVar(&cfg.clientID, "client_id", "xfinity-android-application", "OAuth client id")
 	flag.StringVar(&cfg.mqttClientID, "mqtt_client_id", "xfinity-usage-go", "MQTT client id")
 	flag.StringVar(&cfg.mqttStateTopic, "mqtt_state_topic", "homeassistant/sensor/xfinity_internet/state", "MQTT topic")
@@ -37,7 +38,8 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("failed to validate config: %w", err)
 	}
 
-	client := &http.Client{Timeout: cfg.timeout}
+	client := retryablehttp.NewClient()
+	client.RetryMax = 3
 
 	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
 	if err != nil {
