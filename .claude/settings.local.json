@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd comprehensive Prometheus metrics for CronJob health monitoring.\n\nImplements Prometheus Pushgateway integration to track CronJob execution health and performance. Metrics are pushed at the end of every run (including failures) to ensure complete observability.\n\nKey metrics added:\n- Run counters (total, success)\n- Error tracking by category (config, token, usage fetch/parse, MQTT, metrics push)\n- Health indicators (last run timestamp, consecutive failures, last success boolean)\n- Performance histograms (execution, token refresh, usage fetch, MQTT publish durations)\n- HTTP retry tracking (by host, method, status code)\n- Build info (version, Go version)\n\nConfiguration:\n- New PROMETHEUS_ENDPOINT env var/flag for Pushgateway URL\n- New prometheus_job flag (default: \"xfinity-usage\")\n- Version now injectable via build-time ldflags\n\nFiles modified:\n- Add metrics.go with all Prometheus metric definitions and push logic\n- Update main.go to track metrics throughout execution flow\n- Update config.go to add Prometheus configuration fields\n- Update Dockerfile to support VERSION build arg\n- Add CLAUDE.md with comprehensive documentation\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

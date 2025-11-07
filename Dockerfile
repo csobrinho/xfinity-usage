@@ -4,7 +4,8 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go build -o main .
+ARG VERSION=dev
+RUN go build -ldflags "-X main.version=${VERSION}" -o main .
 
 # Runner stage.
 FROM alpine:latest AS runner

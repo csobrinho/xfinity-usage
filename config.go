@@ -6,16 +6,18 @@ import (
 )
 
 type config struct {
-	timeout        time.Duration
-	clientID       string
-	clientSecret   string
-	refreshToken   string
-	applicationID  string
-	mqttURL        string
-	mqttClientID   string
-	mqttStateTopic string
-	mqttUsername   string
-	mqttPassword   string
+	timeout            time.Duration
+	clientID           string
+	clientSecret       string
+	refreshToken       string
+	applicationID      string
+	mqttURL            string
+	mqttClientID       string
+	mqttStateTopic     string
+	mqttUsername       string
+	mqttPassword       string
+	prometheusEndpoint string
+	prometheusJob      string
 }
 
 var cfg config
