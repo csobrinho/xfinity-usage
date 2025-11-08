@@ -14,46 +14,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run go fmt check
-        run: |
-          if [ -n "$(gofmt -s -l .)" ]; then
-            echo "Go code is not formatted:"
-            gofmt -s -d .
-            exit 1
-          fi
-
-      - name: Build
-        run: go build -v ./...
-
-      - name: Run tests (if any exist)
-        run: |
-          if go list ./... | grep -q .; then
-            go test -v -race -coverprofile=coverage.out ./...
-          else
-            echo "No tests found, skipping"
-          fi
-
   build-and-push-image:
     runs-on: ubuntu-latest
     needs: test

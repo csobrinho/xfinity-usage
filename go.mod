@@ -1,8 +1,6 @@
 module github.com/csobrinho/xfinity-usage
 
-go 1.24.0
-
-toolchain go1.25.4
+go 1.25.4
 
 require (
 	github.com/eclipse/paho.golang v0.23.0
