@@ -140,7 +140,7 @@ func main() {
 	}
 
 	if cfg.prometheusEndpoint != "" {
-		if perr := pushMetrics(ctx, cfg.prometheusEndpoint, cfg.prometheusJob); err != nil {
+		if perr := pushMetrics(ctx, cfg.prometheusEndpoint, cfg.prometheusJob); perr != nil {
 			log.Printf("main: failed to push metrics: %v", perr)
 			recordError(errorCategoryMetricsPush)
 		} else {
