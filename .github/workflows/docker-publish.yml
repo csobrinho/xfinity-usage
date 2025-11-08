@@ -2,12 +2,13 @@ name: Container Image Publish
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["check.yml"]
+    types:
+      - completed
+    branches: [ main ]
   push:
-    branches: [ main ]
-    # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
-  pull_request:
-    branches: [ main ]
 
 env:
   REGISTRY: ghcr.io
@@ -16,7 +17,6 @@ env:
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
-    needs: test
     permissions:
       contents: read
       packages: write
