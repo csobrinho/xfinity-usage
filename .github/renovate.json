@@ -3,7 +3,6 @@
   "extends": ["config:recommended"],
   "assignees": ["csobrinho"],
   "automerge": true,
-  "ignoreTests": true,
   "major": {
     "automerge": false
   }
