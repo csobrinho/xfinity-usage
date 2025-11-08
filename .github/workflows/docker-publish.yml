@@ -2,12 +2,8 @@ name: Container Image Publish
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["check.yml"]
-    types:
-      - completed
-    branches: [ main ]
   push:
+    branches: [ main ]
     tags: [ 'v*.*.*' ]
 
 env:
