@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/google/logger"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
@@ -72,7 +72,7 @@ func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessTok
 	if err != nil {
 		return fmt.Errorf("failed to format JSON: %w", err)
 	}
-	log.Println(string(pretty))
+	logger.Info(string(pretty))
 
 	return nil
 }
@@ -80,7 +80,7 @@ func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessTok
 func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, error) {
 	// Short-circuit if access token is already provided.
 	if cfg.accessToken != "" {
-		log.Println("main: using provided access token")
+		logger.Info("main: using provided access token")
 		return cfg.accessToken, nil
 	}
 
@@ -92,7 +92,7 @@ func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, 
 		recordError(errorCategoryTokenRefresh)
 		return "", fmt.Errorf("failed to refresh token: %w", err)
 	}
-	log.Println("main: token Expiry:", token.ExpiresIn)
+	logger.Infof("main: token Expiry: %d", token.ExpiresIn)
 	return token.AccessToken, nil
 }
 
@@ -119,9 +119,9 @@ func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, acc
 		return fmt.Errorf("failed to get internet usage in gb: %w", err)
 	}
 
-	log.Printf("main: usage %7.2f GB", cur)
+	logger.Infof("main: usage %7.2f GB", cur)
 	if allowed, err := monthlyUsage.AllowableUsage.GB(); err == nil {
-		log.Printf("main: allowed %7.2f GB", allowed)
+		logger.Infof("main: allowed %7.2f GB", allowed)
 	}
 
 	// Publish to MQTT.
@@ -159,13 +159,16 @@ func run(ctx context.Context) error {
 	}
 
 	if cfg.query != "" {
-		log.Println("main: running test query")
+		logger.Info("main: running test query")
 		return actionRunQuery(ctx, client, accessToken, cfg.query)
 	}
 	return actionFetchUsageData(ctx, client, accessToken)
 }
 
 func main() {
+	logger.Init("xfinity-usage", false, false, os.Stdout)
+	defer logger.Close()
+
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
 	defer cancel()
 
@@ -183,15 +186,15 @@ func main() {
 
 	if cfg.prometheusEndpoint != "" {
 		if perr := pushMetrics(ctx, cfg.prometheusEndpoint, cfg.prometheusJob); perr != nil {
-			log.Printf("main: failed to push metrics: %v", perr)
+			logger.Errorf("main: failed to push metrics: %v", perr)
 			recordError(errorCategoryMetricsPush)
 		} else {
-			log.Println("main: metrics pushed successfully")
+			logger.Info("main: metrics pushed successfully")
 		}
 	}
 
 	if err != nil {
-		log.Fatalf("main: %v", err)
+		logger.Fatalf("main: %v", err)
 	}
-	log.Println("main: all done ✅")
+	logger.Info("main: all done ✅")
 }
