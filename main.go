@@ -23,6 +23,7 @@ const (
 
 func init() {
 	flag.DurationVar(&cfg.timeout, "timeout", 90*time.Second, "timeout in seconds")
+	flag.IntVar(&cfg.verbose, "v", 0, "verbose level")
 	flag.StringVar(&cfg.clientID, "client_id", "xfinity-android-application", "OAuth client id")
 	flag.StringVar(&cfg.mqttClientID, "mqtt_client_id", "xfinity-usage-go", "MQTT client id")
 	flag.StringVar(&cfg.mqttStateTopic, "mqtt_state_topic", "homeassistant/sensor/xfinity_internet/state", "MQTT topic")
@@ -166,7 +167,8 @@ func run(ctx context.Context) error {
 }
 
 func main() {
-	logger.Init("xfinity-usage", false, false, os.Stdout)
+	logger.Init("xfinity-usage", cfg.verbose > 0, false, os.Stdout)
+	logger.SetLevel(logger.Level(cfg.verbose))
 	defer logger.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)

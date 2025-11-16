@@ -7,6 +7,7 @@ import (
 
 type config struct {
 	timeout            time.Duration
+	verbose            int
 	clientID           string
 	clientSecret       string
 	refreshToken       string
