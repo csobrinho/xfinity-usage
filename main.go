@@ -94,6 +94,7 @@ func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, 
 		return "", fmt.Errorf("failed to refresh token: %w", err)
 	}
 	logger.Infof("main: token Expiry: %d", token.ExpiresIn)
+	logger.V(1).Infof("main: access token: %s", token.AccessToken)
 	return token.AccessToken, nil
 }
 
