@@ -10,6 +10,7 @@ type config struct {
 	clientID           string
 	clientSecret       string
 	refreshToken       string
+	accessToken        string
 	applicationID      string
 	mqttURL            string
 	mqttClientID       string
@@ -18,6 +19,7 @@ type config struct {
 	mqttPassword       string
 	prometheusEndpoint string
 	prometheusJob      string
+	query              string
 }
 
 var cfg config
@@ -29,8 +31,8 @@ func (c config) validate() error {
 	if c.clientSecret == "" {
 		return fmt.Errorf("missing --client_secret")
 	}
-	if c.refreshToken == "" {
-		return fmt.Errorf("missing --refresh_token")
+	if c.refreshToken == "" && c.accessToken == "" {
+		return fmt.Errorf("either --refresh_token or --access_token must be provided")
 	}
 	if c.mqttURL == "" {
 		return fmt.Errorf("missing --mqtt_url")

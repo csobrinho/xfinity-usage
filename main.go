@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -27,47 +29,59 @@ func init() {
 
 	flag.StringVar(&cfg.clientSecret, "client_secret", os.Getenv("CLIENT_SECRET"), "OAuth client secret")
 	flag.StringVar(&cfg.refreshToken, "refresh_token", os.Getenv("REFRESH_TOKEN"), "OAuth refresh token")
+	flag.StringVar(&cfg.accessToken, "access_token", os.Getenv("ACCESS_TOKEN"), "OAuth access token")
 	flag.StringVar(&cfg.applicationID, "application_id", os.Getenv("APPLICATION_ID"), "OAuth application id")
 	flag.StringVar(&cfg.mqttURL, "mqtt_url", os.Getenv("MQTT_URL"), "MQTT url")
 	flag.StringVar(&cfg.mqttUsername, "mqtt_username", os.Getenv("MQTT_USERNAME"), "MQTT username")
 	flag.StringVar(&cfg.mqttPassword, "mqtt_password", os.Getenv("MQTT_PASSWORD"), "MQTT password")
 	flag.StringVar(&cfg.prometheusJob, "prometheus_job", "xfinity-usage", "Prometheus job name")
 	flag.StringVar(&cfg.prometheusEndpoint, "prometheus_endpoint", os.Getenv("PROMETHEUS_ENDPOINT"), "Prometheus Pushgateway endpoint")
+	flag.StringVar(&cfg.query, "query", os.Getenv("QUERY"), "GraphQL query to test")
 
 	flag.Parse()
 }
 
-func run(ctx context.Context) error {
-	// Increment total runs counter.
-	runsTotal.Inc()
-
-	// Validate configuration.
-	if err := cfg.validate(); err != nil {
-		recordError(errorCategoryConfigValidation)
-		return fmt.Errorf("failed to validate config: %w", err)
-	}
-
-	client := retryablehttp.NewClient()
-	client.RetryMax = 3
-
-	// Track retries for HTTP operations.
-	client.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		shouldRetry, retryErr := retryablehttp.DefaultRetryPolicy(ctx, resp, err)
-		if shouldRetry {
-			host := "unknown"
-			method := "unknown"
-			statusCode := 0
-
-			if resp != nil {
-				if resp.Request != nil {
-					host = resp.Request.URL.Host
-					method = resp.Request.Method
-				}
-				statusCode = resp.StatusCode
+func retryPolicyWithMetrics(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	shouldRetry, retryErr := retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+	if shouldRetry {
+		host := "unknown"
+		method := "unknown"
+		statusCode := 0
+		if resp != nil {
+			if resp.Request != nil {
+				host = resp.Request.URL.Host
+				method = resp.Request.Method
 			}
-			recordRetry(host, method, statusCode)
+			statusCode = resp.StatusCode
 		}
-		return shouldRetry, retryErr
+		recordRetry(host, method, statusCode)
+	}
+	return shouldRetry, retryErr
+}
+
+func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessToken, graphql string) error {
+	body, err := query(ctx, client, accessToken, usageURL, "POST", strings.NewReader(graphql), usageExtraHeaders)
+	if err != nil {
+		return err
+	}
+	var data interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+	pretty, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to format JSON: %w", err)
+	}
+	log.Println(string(pretty))
+
+	return nil
+}
+
+func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, error) {
+	// Short-circuit if access token is already provided.
+	if cfg.accessToken != "" {
+		log.Println("main: using provided access token")
+		return cfg.accessToken, nil
 	}
 
 	// Refresh OAuth token.
@@ -76,13 +90,15 @@ func run(ctx context.Context) error {
 	tokenRefreshDuration.Observe(time.Since(tokenStart).Seconds())
 	if err != nil {
 		recordError(errorCategoryTokenRefresh)
-		return fmt.Errorf("failed to refresh token: %w", err)
+		return "", fmt.Errorf("failed to refresh token: %w", err)
 	}
 	log.Println("main: token Expiry:", token.ExpiresIn)
+	return token.AccessToken, nil
+}
 
-	// Fetch usage data.
+func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, accessToken string) error {
 	usageStart := time.Now()
-	u, err := internetDataUsageRequest(ctx, client, token.AccessToken)
+	u, err := internetDataUsageRequest(ctx, client, accessToken)
 	usageFetchDuration.Observe(time.Since(usageStart).Seconds())
 	if err != nil {
 		recordError(errorCategoryUsageFetch)
@@ -119,8 +135,34 @@ func run(ctx context.Context) error {
 
 	// Record success metrics.
 	recordSuccess()
-
 	return nil
+}
+
+func run(ctx context.Context) error {
+	// Increment total runs counter.
+	runsTotal.Inc()
+
+	// Validate configuration.
+	if err := cfg.validate(); err != nil {
+		recordError(errorCategoryConfigValidation)
+		return fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	client := retryablehttp.NewClient()
+	client.RetryMax = 3
+	client.CheckRetry = retryPolicyWithMetrics
+
+	// Get access token (either from config or refresh).
+	accessToken, err := getAccessToken(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	if cfg.query != "" {
+		log.Println("main: running test query")
+		return actionRunQuery(ctx, client, accessToken, cfg.query)
+	}
+	return actionFetchUsageData(ctx, client, accessToken)
 }
 
 func main() {

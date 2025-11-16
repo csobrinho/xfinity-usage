@@ -79,28 +79,35 @@ func (u UsageValue) GB() (float32, error) {
 	}
 }
 
-func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client, accessToken string) (*Usage, error) {
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", usageURL, strings.NewReader(usageBody))
+func query(ctx context.Context, client *retryablehttp.Client, accessToken, url, method string, requestBody io.Reader, headers map[string]string) ([]byte, error) {
+	req, err := retryablehttp.NewRequestWithContext(ctx, method, url, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("authorization", "Bearer "+accessToken)
 	req.Header.Set("x-id-token", accessToken)
-	for key, value := range usageExtraHeaders {
+	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	resp, err := client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
 
 	// Check for HTTP errors
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("usage request failed with status %d: %s", resp.StatusCode, body)
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed with request status %d: %s", res.StatusCode, body)
 	}
+	return body, nil
+}
 
+func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client, accessToken string) (*Usage, error) {
+	body, err := query(ctx, client, accessToken, usageURL, "POST", strings.NewReader(usageBody), usageExtraHeaders)
+	if err != nil {
+		return nil, err
+	}
 	// Parse the token response
 	u := new(Usage)
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(u); err != nil {
