@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/logger"
+	log "github.com/google/logger"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
@@ -23,11 +25,11 @@ const (
 
 func init() {
 	flag.DurationVar(&cfg.timeout, "timeout", 90*time.Second, "timeout in seconds")
-	flag.IntVar(&cfg.verbose, "v", 0, "verbose level")
 	flag.StringVar(&cfg.clientID, "client_id", "xfinity-android-application", "OAuth client id")
 	flag.StringVar(&cfg.mqttClientID, "mqtt_client_id", "xfinity-usage-go", "MQTT client id")
 	flag.StringVar(&cfg.mqttStateTopic, "mqtt_state_topic", "homeassistant/sensor/xfinity_internet/state", "MQTT topic")
 
+	flag.IntVar(&cfg.verbose, "v", intGetenv("VERBOSE", 1), "Logger verbose level")
 	flag.StringVar(&cfg.clientSecret, "client_secret", os.Getenv("CLIENT_SECRET"), "OAuth client secret")
 	flag.StringVar(&cfg.refreshToken, "refresh_token", os.Getenv("REFRESH_TOKEN"), "OAuth refresh token")
 	flag.StringVar(&cfg.accessToken, "access_token", os.Getenv("ACCESS_TOKEN"), "OAuth access token")
@@ -40,6 +42,19 @@ func init() {
 	flag.StringVar(&cfg.query, "query", os.Getenv("QUERY"), "GraphQL query to test")
 
 	flag.Parse()
+}
+
+func intGetenv(name string, defaultVal int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultVal
+	}
+	iv, err := strconv.Atoi(v)
+	if err != nil {
+		log.Warningf("main: unsupported %s value %q, defaulting to %d", name, v, defaultVal)
+		return defaultVal
+	}
+	return iv
 }
 
 func retryPolicyWithMetrics(ctx context.Context, resp *http.Response, err error) (bool, error) {
@@ -60,6 +75,26 @@ func retryPolicyWithMetrics(ctx context.Context, resp *http.Response, err error)
 	return shouldRetry, retryErr
 }
 
+func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, error) {
+	// Short-circuit if access token is already provided.
+	if cfg.accessToken != "" {
+		log.Info("main: using provided access token")
+		return cfg.accessToken, nil
+	}
+
+	// Refresh OAuth token.
+	tokenStart := time.Now()
+	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
+	tokenRefreshDuration.Observe(time.Since(tokenStart).Seconds())
+	if err != nil {
+		recordError(errorCategoryTokenRefresh)
+		return "", fmt.Errorf("failed to refresh token: %w", err)
+	}
+	log.Infof("main: token Expiry: %d", token.ExpiresIn)
+	log.V(2).Infof("main: access token: %s", token.AccessToken)
+	return token.AccessToken, nil
+}
+
 func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessToken, graphql string) error {
 	body, err := query(ctx, client, accessToken, usageURL, "POST", strings.NewReader(graphql), usageExtraHeaders)
 	if err != nil {
@@ -73,29 +108,9 @@ func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessTok
 	if err != nil {
 		return fmt.Errorf("failed to format JSON: %w", err)
 	}
-	logger.Info(string(pretty))
+	log.Info(string(pretty))
 
 	return nil
-}
-
-func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, error) {
-	// Short-circuit if access token is already provided.
-	if cfg.accessToken != "" {
-		logger.Info("main: using provided access token")
-		return cfg.accessToken, nil
-	}
-
-	// Refresh OAuth token.
-	tokenStart := time.Now()
-	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
-	tokenRefreshDuration.Observe(time.Since(tokenStart).Seconds())
-	if err != nil {
-		recordError(errorCategoryTokenRefresh)
-		return "", fmt.Errorf("failed to refresh token: %w", err)
-	}
-	logger.Infof("main: token Expiry: %d", token.ExpiresIn)
-	logger.V(1).Infof("main: access token: %s", token.AccessToken)
-	return token.AccessToken, nil
 }
 
 func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, accessToken string) error {
@@ -121,9 +136,9 @@ func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, acc
 		return fmt.Errorf("failed to get internet usage in gb: %w", err)
 	}
 
-	logger.Infof("main: usage %7.2f GB", cur)
+	log.Infof("main: usage %7.2f GB", cur)
 	if allowed, err := monthlyUsage.AllowableUsage.GB(); err == nil {
-		logger.Infof("main: allowed %7.2f GB", allowed)
+		log.Infof("main: allowed %7.2f GB", allowed)
 	}
 
 	// Publish to MQTT.
@@ -153,6 +168,7 @@ func run(ctx context.Context) error {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 3
 	client.CheckRetry = retryPolicyWithMetrics
+	client.Logger = &logger{prefix: "http: "}
 
 	// Get access token (either from config or refresh).
 	accessToken, err := getAccessToken(ctx, client)
@@ -161,16 +177,16 @@ func run(ctx context.Context) error {
 	}
 
 	if cfg.query != "" {
-		logger.Info("main: running test query")
+		log.Info("main: running test query")
 		return actionRunQuery(ctx, client, accessToken, cfg.query)
 	}
 	return actionFetchUsageData(ctx, client, accessToken)
 }
 
 func main() {
-	logger.Init("xfinity-usage", cfg.verbose > 0, false, os.Stdout)
-	logger.SetLevel(logger.Level(cfg.verbose))
-	defer logger.Close()
+	log.Init("xfinity-usage", cfg.verbose > 0, false, io.Discard)
+	log.SetLevel(log.Level(cfg.verbose))
+	defer log.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
 	defer cancel()
@@ -189,15 +205,15 @@ func main() {
 
 	if cfg.prometheusEndpoint != "" {
 		if perr := pushMetrics(ctx, cfg.prometheusEndpoint, cfg.prometheusJob); perr != nil {
-			logger.Errorf("main: failed to push metrics: %v", perr)
+			log.Errorf("main: failed to push metrics: %v", perr)
 			recordError(errorCategoryMetricsPush)
 		} else {
-			logger.Info("main: metrics pushed successfully")
+			log.Info("main: metrics pushed successfully")
 		}
 	}
 
 	if err != nil {
-		logger.Fatalf("main: %v", err)
+		log.Fatalf("main: %v", err)
 	}
-	logger.Info("main: all done ✅")
+	log.Info("main: all done ✅")
 }
