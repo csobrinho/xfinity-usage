@@ -27,7 +27,8 @@ func init() {
 	flag.DurationVar(&cfg.timeout, "timeout", 90*time.Second, "timeout in seconds")
 	flag.StringVar(&cfg.clientID, "client_id", "xfinity-android-application", "OAuth client id")
 	flag.StringVar(&cfg.mqttClientID, "mqtt_client_id", "xfinity-usage-go", "MQTT client id")
-	flag.StringVar(&cfg.mqttStateTopic, "mqtt_state_topic", "homeassistant/sensor/xfinity_internet/state", "MQTT topic")
+	flag.StringVar(&cfg.mqttStateTopic, "mqtt_state_topic", "homeassistant/sensor/xfinity_internet/state", "MQTT state topic")
+	flag.StringVar(&cfg.mqttAttributesTopic, "mqtt_attributes_topic", "homeassistant/sensor/xfinity_internet/attributes", "MQTT attributes topic")
 
 	flag.IntVar(&cfg.verbose, "v", intGetenv("VERBOSE", 1), "Logger verbose level")
 	flag.StringVar(&cfg.clientSecret, "client_secret", os.Getenv("CLIENT_SECRET"), "OAuth client secret")
@@ -141,9 +142,16 @@ func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, acc
 		log.Infof("main: allowed %7.2f GB", allowed)
 	}
 
+	// Build attributes for Home Assistant.
+	attributes, err := u.ToAttributes()
+	if err != nil {
+		recordError(errorCategoryUsageParse)
+		return fmt.Errorf("failed to build usage attributes: %w", err)
+	}
+
 	// Publish to MQTT.
 	mqttStart := time.Now()
-	if err := mqttPublish(ctx, cfg.mqttURL, cfg.mqttUsername, cfg.mqttPassword, cfg.clientID, cfg.mqttStateTopic, cur); err != nil {
+	if err := mqttPublish(ctx, cfg.mqttURL, cfg.mqttUsername, cfg.mqttPassword, cfg.clientID, cfg.mqttStateTopic, cfg.mqttAttributesTopic, cur, attributes); err != nil {
 		mqttPublishDuration.Observe(time.Since(mqttStart).Seconds())
 		recordError(errorCategoryMQTTPublish)
 		return fmt.Errorf("failed to publish to mqtt: %w", err)

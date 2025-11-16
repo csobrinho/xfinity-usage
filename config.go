@@ -6,21 +6,22 @@ import (
 )
 
 type config struct {
-	timeout            time.Duration
-	verbose            int
-	clientID           string
-	clientSecret       string
-	refreshToken       string
-	accessToken        string
-	applicationID      string
-	mqttURL            string
-	mqttClientID       string
-	mqttStateTopic     string
-	mqttUsername       string
-	mqttPassword       string
-	prometheusEndpoint string
-	prometheusJob      string
-	query              string
+	timeout             time.Duration
+	verbose             int
+	clientID            string
+	clientSecret        string
+	refreshToken        string
+	accessToken         string
+	applicationID       string
+	mqttURL             string
+	mqttClientID        string
+	mqttStateTopic      string
+	mqttAttributesTopic string
+	mqttUsername        string
+	mqttPassword        string
+	prometheusEndpoint  string
+	prometheusJob       string
+	query               string
 }
 
 var cfg config
@@ -43,6 +44,9 @@ func (c config) validate() error {
 	}
 	if c.mqttStateTopic == "" {
 		return fmt.Errorf("missing --mqtt_state_topic")
+	}
+	if c.mqttAttributesTopic == "" {
+		return fmt.Errorf("missing --mqtt_attributes_topic")
 	}
 	if c.mqttUsername == "" {
 		return fmt.Errorf("missing --mqtt_username")

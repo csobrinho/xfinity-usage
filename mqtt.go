@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -9,8 +10,7 @@ import (
 	"github.com/eclipse/paho.golang/paho"
 )
 
-func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttClientID, mqttStateTopic string, usage float32) error {
-	// TODO: Make sure the attributes and config topics also exist.
+func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttClientID, mqttStateTopic, mqttAttributesTopic string, usage float32, attributes *UsageAttributes) error {
 	u, err := url.Parse(mqttURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse mqtt server url: %v", err)
@@ -53,11 +53,30 @@ func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttC
 	if err = c.AwaitConnection(ctx); err != nil {
 		return err
 	}
-	_, err = c.Publish(ctx, &paho.Publish{
+
+	// Publish state (numeric value).
+	if _, err = c.Publish(ctx, &paho.Publish{
 		Topic:   mqttStateTopic,
 		Retain:  true,
 		QoS:     1,
 		Payload: fmt.Appendf(nil, "%.2f", usage),
-	})
-	return err
+	}); err != nil {
+		return fmt.Errorf("failed to publish state: %w", err)
+	}
+
+	// Publish attributes (JSON).
+	attrs, err := json.Marshal(attributes)
+	if err != nil {
+		return fmt.Errorf("failed to marshal attributes: %w", err)
+	}
+	if _, err = c.Publish(ctx, &paho.Publish{
+		Topic:   mqttAttributesTopic,
+		Retain:  true,
+		QoS:     1,
+		Payload: attrs,
+	}); err != nil {
+		return fmt.Errorf("failed to publish attributes: %w", err)
+	}
+
+	return nil
 }

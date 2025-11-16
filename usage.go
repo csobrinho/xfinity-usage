@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	log "github.com/google/logger"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
@@ -69,14 +71,139 @@ func (u UsageValue) GB() (float32, error) {
 	}
 	switch strings.ToLower(u.Unit) {
 	case "mb":
-		return *u.Value / 1024, nil
+		return *u.Value / 1000, nil
 	case "gb":
 		return *u.Value, nil
 	case "tb":
-		return *u.Value * 1024, nil
+		return *u.Value * 1000, nil
 	default:
 		return 0, fmt.Errorf("unknown %s unit", u.Unit)
 	}
+}
+
+// calculateEstimatedUsage calculates the estimated usage at the end of the billing period
+// based on current consumption rate. Returns (estimatedUsage, dailyAverage).
+func calculateEstimatedUsage(currentGB float32, startDate, endDate string) (float32, float32) {
+	// Default to current usage if we can't calculate.
+	if startDate == "" || endDate == "" {
+		log.Warning("usage: start_date or end_date is empty, cannot calculate estimated usage")
+		return currentGB, 0
+	}
+
+	start, errStart := time.Parse("2006-01-02", startDate)
+	end, errEnd := time.Parse("2006-01-02", endDate)
+
+	if errStart != nil || errEnd != nil {
+		log.Warningf("usage: failed to parse dates (start: %q, end: %q): %v, %v", startDate, endDate, errStart, errEnd)
+		return currentGB, 0
+	}
+
+	now := time.Now()
+	totalDays := end.Sub(start).Hours() / 24
+	daysElapsed := now.Sub(start).Hours() / 24
+
+	// Ensure we don't divide by zero and days elapsed is positive.
+	if daysElapsed <= 0 || totalDays <= 0 {
+		log.Warningf("usage: invalid days calculation (elapsed: %.2f, total: %.2f)", daysElapsed, totalDays)
+		return currentGB, 0
+	}
+
+	dailyAverage := currentGB / float32(daysElapsed)
+	estimatedUsage := dailyAverage * float32(totalDays)
+	return estimatedUsage, dailyAverage
+}
+
+// ToAttributes converts the Usage data to UsageAttributes for MQTT publishing.
+func (u *Usage) ToAttributes() (*UsageAttributes, error) {
+	// Validate usage data structure.
+	if u.Data == nil || u.Data.Account == nil || u.Data.Account.Internet == nil ||
+		u.Data.Account.Internet.Usage == nil || len(u.Data.Account.Internet.Usage.MonthlyUsage) == 0 {
+		return nil, fmt.Errorf("invalid usage data structure")
+	}
+
+	monthlyUsage := u.Data.Account.Internet.Usage.MonthlyUsage[0]
+
+	// Get current and allowable usage in GB.
+	currentGB, err := monthlyUsage.CurrentUsage.GB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current usage in GB: %w", err)
+	}
+
+	allowableGB, err := monthlyUsage.AllowableUsage.GB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get allowable usage in GB: %w", err)
+	}
+	usageRemaining := max(int(allowableGB-currentGB), 0)
+
+	intPtrToInt := func(p *int) int {
+		if p == nil {
+			return 0
+		}
+		return *p
+	}
+
+	// Extract optional fields with defaults.
+	overageCharge := intPtrToInt(monthlyUsage.OverageCharge)
+	maxOverageCharge := intPtrToInt(monthlyUsage.MaximumOverageCharge)
+
+	var inPaidOverage bool
+	if u.Data.Account.Internet.Usage.InPaidOverage != nil {
+		inPaidOverage = *u.Data.Account.Internet.Usage.InPaidOverage
+	}
+
+	// Calculate how much over the limit in GB.
+	overageUsed := 0
+	if monthlyUsage.Overage {
+		overageUsed = max(int(currentGB-allowableGB), 0)
+	}
+
+	// Calculate estimated usage and daily average.
+	usageEstimated, usageDailyAverage := calculateEstimatedUsage(currentGB, monthlyUsage.StartDate, monthlyUsage.EndDate)
+
+	return &UsageAttributes{
+		FriendlyName:      "Xfinity Usage",
+		UnitOfMeasurement: "GB",
+		DeviceClass:       "data_size",
+		StateClass:        "measurement",
+		Icon:              "mdi:wan",
+		//
+		StartDate:            monthlyUsage.StartDate,
+		EndDate:              monthlyUsage.EndDate,
+		DaysRemaining:        intPtrToInt(monthlyUsage.DaysRemaining),
+		UsageRemaining:       usageRemaining,
+		UsageEstimated:       usageEstimated,
+		UsageDailyAverage:    usageDailyAverage,
+		AllowableUsage:       int(allowableGB),
+		InPaidOverage:        inPaidOverage,
+		OverageCharges:       overageCharge,
+		OverageUsed:          overageUsed,
+		MaximumOverageCharge: maxOverageCharge,
+		Policy:               monthlyUsage.Policy,
+	}, nil
+}
+
+// UsageAttributes represents the usage data published to MQTT for Home Assistant.
+type UsageAttributes struct {
+	// Main Home Assistant attributes.
+	FriendlyName      string `json:"friendly_name"`
+	UnitOfMeasurement string `json:"unit_of_measurement"`
+	DeviceClass       string `json:"device_class"`
+	StateClass        string `json:"state_class"`
+	Icon              string `json:"icon"`
+
+	// Custom attributes below.
+	StartDate            string  `json:"start_date"`
+	EndDate              string  `json:"end_date"`
+	DaysRemaining        int     `json:"days_remaining"`
+	UsageRemaining       int     `json:"usage_remaining"`
+	UsageEstimated       float32 `json:"usage_estimated"`
+	UsageDailyAverage    float32 `json:"usage_daily_average"`
+	AllowableUsage       int     `json:"allowable_usage"`
+	InPaidOverage        bool    `json:"in_paid_overage"`
+	OverageCharges       int     `json:"overage_charges"`
+	OverageUsed          int     `json:"overage_used"`
+	MaximumOverageCharge int     `json:"maximum_overage_charge"`
+	Policy               string  `json:"policy"`
 }
 
 func query(ctx context.Context, client *retryablehttp.Client, accessToken, url, method string, requestBody io.Reader, headers map[string]string) ([]byte, error) {
