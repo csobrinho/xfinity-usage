@@ -11,7 +11,7 @@ ARG TARGETOS TARGETARCH
 ARG VERSION=dev
 COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X main.version=${VERSION}" \
+    -ldflags "-X main.version=${VERSION}" \
     -o main .
 
 # Runner stage - use scratch for minimal image.
