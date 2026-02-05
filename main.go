@@ -202,11 +202,10 @@ func main() {
 	setBuildInfo(version, runtime.Version())
 	recordRunStart()
 
-	// Track execution duration.
 	start := time.Now()
-	defer func() { executionDuration.Observe(time.Since(start).Seconds()) }()
-
 	err := run(ctx)
+	executionDuration.Observe(time.Since(start).Seconds())
+
 	if err != nil {
 		recordFailure()
 	}
@@ -214,7 +213,6 @@ func main() {
 	if cfg.prometheusEndpoint != "" {
 		if perr := pushMetrics(ctx, cfg.prometheusEndpoint, cfg.prometheusJob); perr != nil {
 			log.Errorf("main: failed to push metrics: %v", perr)
-			recordError(errorCategoryMetricsPush)
 		} else {
 			log.Info("main: metrics pushed successfully")
 		}
