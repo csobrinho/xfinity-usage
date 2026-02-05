@@ -55,6 +55,12 @@ var (
 		Help: "Whether the last run was successful (1) or failed (0)",
 	})
 
+	// Gauge for last error timestamp by category (use changes() to count occurrences).
+	lastErrorTimestamp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "xfinity_usage_last_error_timestamp",
+		Help: "Timestamp of the last error by category",
+	}, []string{"category"})
+
 	// Histogram for execution duration.
 	executionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "xfinity_usage_execution_duration_seconds",
@@ -107,6 +113,7 @@ func init() {
 	metricsRegistry.MustRegister(lastRunTimestamp)
 	metricsRegistry.MustRegister(consecutiveFailures)
 	metricsRegistry.MustRegister(lastRunSuccess)
+	metricsRegistry.MustRegister(lastErrorTimestamp)
 	metricsRegistry.MustRegister(executionDuration)
 	metricsRegistry.MustRegister(tokenRefreshDuration)
 	metricsRegistry.MustRegister(usageFetchDuration)
@@ -128,9 +135,10 @@ const (
 	errorCategoryMetricsPush      errorCategory = "metrics_push"
 )
 
-// recordError increments the error counter for a specific category.
+// recordError increments the error counter and updates the last error timestamp for a specific category.
 func recordError(category errorCategory) {
 	errorsTotal.WithLabelValues(string(category)).Inc()
+	lastErrorTimestamp.WithLabelValues(string(category)).Set(float64(time.Now().Unix()))
 }
 
 // recordSuccess records a successful run.
