@@ -31,6 +31,7 @@ type Usage struct {
 	Data *struct {
 		Account *struct {
 			Internet *struct {
+				Plan  *InternetPlan `json:"plan,omitempty"`
 				Usage *struct {
 					InPaidOverage *bool `json:"inPaidOverage,omitempty"`
 					Courtesy      *struct {
@@ -43,6 +44,12 @@ type Usage struct {
 			} `json:"internet,omitempty"`
 		} `json:"accountByServiceAccountId,omitempty"`
 	} `json:"data,omitempty"`
+}
+
+type InternetPlan struct {
+	Name          string      `json:"name,omitempty"`
+	DownloadSpeed *UsageValue `json:"downloadSpeed,omitempty"`
+	UploadSpeed   *UsageValue `json:"uploadSpeed,omitempty"`
 }
 
 type UsageMonthly struct {
@@ -206,13 +213,13 @@ type UsageAttributes struct {
 	Policy               string  `json:"policy"`
 }
 
-func query(ctx context.Context, client *retryablehttp.Client, accessToken, url, method string, requestBody io.Reader, headers map[string]string) ([]byte, error) {
+func query(ctx context.Context, client *retryablehttp.Client, accessToken, idToken, url, method string, requestBody io.Reader, headers map[string]string) ([]byte, error) {
 	req, err := retryablehttp.NewRequestWithContext(ctx, method, url, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("authorization", "Bearer "+accessToken)
-	req.Header.Set("x-id-token", accessToken)
+	req.Header.Set("x-id-token", idToken)
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
@@ -230,8 +237,8 @@ func query(ctx context.Context, client *retryablehttp.Client, accessToken, url, 
 	return body, nil
 }
 
-func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client, accessToken string) (*Usage, error) {
-	body, err := query(ctx, client, accessToken, usageURL, "POST", strings.NewReader(usageBody), usageExtraHeaders)
+func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client, accessToken, idToken string) (*Usage, error) {
+	body, err := query(ctx, client, accessToken, idToken, usageURL, "POST", strings.NewReader(usageBody), usageExtraHeaders)
 	if err != nil {
 		return nil, err
 	}
