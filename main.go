@@ -20,7 +20,7 @@ import (
 const (
 	tokenURL  = "https://xerxes-sub.xerxessecure.com/xerxes-ctrl/oauth/token"
 	usageURL  = "https://gw.api.dh.comcast.com/galileo/graphql"
-	usageBody = `{"operationName":"InternetDataUsage","variables":{},"query":"query InternetDataUsage { accountByServiceAccountId { internet { usage { inPaidOverage courtesy { totalAllowableCourtesy usedCourtesy remainingCourtesy } monthlyUsage { policy month year startDate endDate daysRemaining currentUsage { value unit } allowableUsage { value unit } overage overageCharge maximumOverageCharge courtesyCredit } } } } }"}`
+	usageBody = `{"operationName":"InternetDataUsage","variables":{},"query":"query InternetDataUsage { accountByServiceAccountId { internet { plan { name downloadSpeed { unit value } uploadSpeed { unit value } } usage { inPaidOverage courtesy { totalAllowableCourtesy usedCourtesy remainingCourtesy } monthlyUsage { policy month year startDate endDate daysRemaining currentUsage { value unit } allowableUsage { value unit } overage overageCharge maximumOverageCharge courtesyCredit } } } } }"}`
 )
 
 func init() {
@@ -34,6 +34,7 @@ func init() {
 	flag.StringVar(&cfg.clientSecret, "client_secret", os.Getenv("CLIENT_SECRET"), "OAuth client secret")
 	flag.StringVar(&cfg.refreshToken, "refresh_token", os.Getenv("REFRESH_TOKEN"), "OAuth refresh token")
 	flag.StringVar(&cfg.accessToken, "access_token", os.Getenv("ACCESS_TOKEN"), "OAuth access token")
+	flag.StringVar(&cfg.idToken, "id_token", os.Getenv("ID_TOKEN"), "OAuth id token")
 	flag.StringVar(&cfg.applicationID, "application_id", os.Getenv("APPLICATION_ID"), "OAuth application id")
 	flag.StringVar(&cfg.mqttURL, "mqtt_url", os.Getenv("MQTT_URL"), "MQTT url")
 	flag.StringVar(&cfg.mqttUsername, "mqtt_username", os.Getenv("MQTT_USERNAME"), "MQTT username")
@@ -76,28 +77,29 @@ func retryPolicyWithMetrics(ctx context.Context, resp *http.Response, err error)
 	return shouldRetry, retryErr
 }
 
-func getAccessToken(ctx context.Context, client *retryablehttp.Client) (string, error) {
+func getTokens(ctx context.Context, client *retryablehttp.Client) (string, string, error) {
 	// Short-circuit if access token is already provided.
-	if cfg.accessToken != "" {
+	if cfg.accessToken != "" && cfg.idToken != "" {
 		log.Info("main: using provided access token")
-		return cfg.accessToken, nil
+		return cfg.accessToken, cfg.idToken, nil
 	}
 
 	// Refresh OAuth token.
 	tokenStart := time.Now()
-	token, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
+	token, extra, err := tokenRequest(ctx, client, cfg.refreshToken, cfg.clientID, cfg.clientSecret, cfg.applicationID)
 	tokenRefreshDuration.Observe(time.Since(tokenStart).Seconds())
 	if err != nil {
 		recordError(errorCategoryTokenRefresh)
-		return "", fmt.Errorf("failed to refresh token: %w", err)
+		return "", "", fmt.Errorf("failed to access token: %w", err)
 	}
-	log.Infof("main: token Expiry: %d", token.ExpiresIn)
+	log.Infof("main: token expiry: %d seconds", token.ExpiresIn)
 	log.V(2).Infof("main: access token: %s", token.AccessToken)
-	return token.AccessToken, nil
+	log.V(2).Infof("main: id token:     %s", extra.IDToken)
+	return token.AccessToken, extra.IDToken, nil
 }
 
-func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessToken, graphql string) error {
-	body, err := query(ctx, client, accessToken, usageURL, "POST", strings.NewReader(graphql), usageExtraHeaders)
+func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessToken, idToken, graphql string) error {
+	body, err := query(ctx, client, accessToken, idToken, usageURL, "POST", strings.NewReader(graphql), usageExtraHeaders)
 	if err != nil {
 		return err
 	}
@@ -114,9 +116,9 @@ func actionRunQuery(ctx context.Context, client *retryablehttp.Client, accessTok
 	return nil
 }
 
-func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, accessToken string) error {
+func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, accessToken, idToken string) error {
 	usageStart := time.Now()
-	u, err := internetDataUsageRequest(ctx, client, accessToken)
+	u, err := internetDataUsageRequest(ctx, client, accessToken, idToken)
 	usageFetchDuration.Observe(time.Since(usageStart).Seconds())
 	if err != nil {
 		recordError(errorCategoryUsageFetch)
@@ -179,16 +181,16 @@ func run(ctx context.Context) error {
 	client.Logger = &logger{prefix: "http: "}
 
 	// Get access token (either from config or refresh).
-	accessToken, err := getAccessToken(ctx, client)
+	accessToken, idToken, err := getTokens(ctx, client)
 	if err != nil {
 		return err
 	}
 
 	if cfg.query != "" {
 		log.Info("main: running test query")
-		return actionRunQuery(ctx, client, accessToken, cfg.query)
+		return actionRunQuery(ctx, client, accessToken, idToken, cfg.query)
 	}
-	return actionFetchUsageData(ctx, client, accessToken)
+	return actionFetchUsageData(ctx, client, accessToken, idToken)
 }
 
 func main() {

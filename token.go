@@ -27,7 +27,12 @@ var (
 	}
 )
 
-func tokenRequest(ctx context.Context, client *retryablehttp.Client, refreshToken, clientID, clientSecret, applicationID string) (*oauth2.Token, error) {
+type TokenExtra struct {
+	IDToken    string `json:"id_token"`
+	ActivityID string `json:"activity_id"`
+}
+
+func tokenRequest(ctx context.Context, client *retryablehttp.Client, refreshToken, clientID, clientSecret, applicationID string) (*oauth2.Token, *TokenExtra, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", refreshToken)
@@ -42,7 +47,7 @@ func tokenRequest(ctx context.Context, client *retryablehttp.Client, refreshToke
 	}
 	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for key, value := range tokenExtraHeaders {
@@ -50,21 +55,23 @@ func tokenRequest(ctx context.Context, client *retryablehttp.Client, refreshToke
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
 	// Check for HTTP errors
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, body)
+		return nil, nil, fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, body)
 	}
 
 	// Parse the token response
-	var token oauth2.Token
-	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&token); err != nil {
-		return nil, fmt.Errorf("failed to parse token response: %w", err)
+	var raw struct {
+		oauth2.Token
+		TokenExtra
 	}
-
-	return &token, nil
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&raw); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse token response: %w", err)
+	}
+	return &raw.Token, &raw.TokenExtra, nil
 }

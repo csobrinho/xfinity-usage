@@ -12,6 +12,7 @@ type config struct {
 	clientSecret        string
 	refreshToken        string
 	accessToken         string
+	idToken             string
 	applicationID       string
 	mqttURL             string
 	mqttClientID        string
@@ -35,6 +36,9 @@ func (c config) validate() error {
 	}
 	if c.refreshToken == "" && c.accessToken == "" {
 		return fmt.Errorf("either --refresh_token or --access_token must be provided")
+	}
+	if c.accessToken != "" && c.idToken == "" {
+		return fmt.Errorf("if --access_token is provided, --id_token must also be provided")
 	}
 	if c.mqttURL == "" {
 		return fmt.Errorf("missing --mqtt_url")
