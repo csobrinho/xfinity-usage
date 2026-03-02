@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/paho"
@@ -31,13 +32,13 @@ func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttC
 	cfg.ClientConfig = paho.ClientConfig{
 		ClientID: mqttClientID,
 		OnClientError: func(err error) {
-			mqttLogger.Warn("client error: %s", err)
+			mqttLogger.AsWarn().Printf("client error: %s", err)
 		},
 		OnServerDisconnect: func(d *paho.Disconnect) {
 			if d.Properties != nil {
-				mqttLogger.Info("server requested disconnect: %s", d.Properties.ReasonString)
+				mqttLogger.Printf("server requested disconnect: %s", d.Properties.ReasonString)
 			} else {
-				mqttLogger.Info("server requested disconnect; reason code: %d", d.ReasonCode)
+				mqttLogger.Printf("server requested disconnect; reason code: %d", d.ReasonCode)
 			}
 		},
 	}
@@ -46,7 +47,9 @@ func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttC
 		return err
 	}
 	defer func() {
-		c.Disconnect(ctx)
+		disconnectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		c.Disconnect(disconnectCtx)
 		<-c.Done()
 	}()
 

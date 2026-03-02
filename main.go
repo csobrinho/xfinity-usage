@@ -153,7 +153,7 @@ func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, acc
 
 	// Publish to MQTT.
 	mqttStart := time.Now()
-	if err := mqttPublish(ctx, cfg.mqttURL, cfg.mqttUsername, cfg.mqttPassword, cfg.clientID, cfg.mqttStateTopic, cfg.mqttAttributesTopic, cur, attributes); err != nil {
+	if err := mqttPublish(ctx, cfg.mqttURL, cfg.mqttUsername, cfg.mqttPassword, cfg.mqttClientID, cfg.mqttStateTopic, cfg.mqttAttributesTopic, cur, attributes); err != nil {
 		mqttPublishDuration.Observe(time.Since(mqttStart).Seconds())
 		recordError(errorCategoryMQTTPublish)
 		return fmt.Errorf("failed to publish to mqtt: %w", err)

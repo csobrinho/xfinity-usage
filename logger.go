@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	log "github.com/google/logger"
 )
@@ -12,14 +13,19 @@ func (l *logger) bindArgs(v ...any) string {
 	if len(v) == 0 {
 		return ""
 	}
-	s := " "
+	var s strings.Builder
+	s.WriteString(" ")
 	for i := 0; i < len(v); i += 2 {
 		if i > 0 {
-			s += " "
+			s.WriteString(" ")
 		}
-		s += fmt.Sprintf("%v: %v", v[i], v[i+1])
+		if i+1 < len(v) {
+			fmt.Fprintf(&s, "%v: %v", v[i], v[i+1])
+		} else {
+			fmt.Fprintf(&s, "%v", v[i])
+		}
 	}
-	return s
+	return s.String()
 }
 
 // Satisfies the mqtt Logger interface.
@@ -58,7 +64,9 @@ func (l *logger) Warn(msg string, v ...any) {
 }
 
 // AsWarn returns an mqtt Logger that routes to warning level.
-func (l *logger) AsWarn() *levelLogger { return &levelLogger{prefix: l.prefix, fn: log.Warningf} }
+func (l *logger) AsWarn() *levelLogger {
+	return &levelLogger{prefix: l.prefix, fn: log.Warningf}
+}
 
 // levelLogger adapts a log function to the mqtt Logger interface.
 type levelLogger struct {

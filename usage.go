@@ -59,8 +59,8 @@ type UsageMonthly struct {
 	StartDate            string     `json:"startDate,omitempty"`
 	EndDate              string     `json:"endDate,omitempty"`
 	DaysRemaining        *int       `json:"daysRemaining,omitempty"`
-	CurrentUsage         UsageValue `json:"currentUsage,omitempty"`
-	AllowableUsage       UsageValue `json:"allowableUsage,omitempty"`
+	CurrentUsage         UsageValue `json:"currentUsage"`
+	AllowableUsage       UsageValue `json:"allowableUsage"`
 	Overage              bool       `json:"overage"`
 	OverageCharge        *int       `json:"overageCharge,omitempty"`
 	MaximumOverageCharge *int       `json:"maximumOverageCharge,omitempty"`
@@ -242,7 +242,6 @@ func internetDataUsageRequest(ctx context.Context, client *retryablehttp.Client,
 	if err != nil {
 		return nil, err
 	}
-	// Parse the token response
 	u := new(Usage)
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(u); err != nil {
 		return nil, fmt.Errorf("failed to parse usage response: %w", err)

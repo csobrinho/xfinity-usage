@@ -31,14 +31,14 @@ func (c config) validate() error {
 	if c.clientID == "" {
 		return fmt.Errorf("missing --client_id")
 	}
-	if c.clientSecret == "" {
-		return fmt.Errorf("missing --client_secret")
-	}
 	if c.refreshToken == "" && c.accessToken == "" {
 		return fmt.Errorf("either --refresh_token or --access_token must be provided")
 	}
 	if c.accessToken != "" && c.idToken == "" {
 		return fmt.Errorf("if --access_token is provided, --id_token must also be provided")
+	}
+	if c.accessToken == "" && c.clientSecret == "" {
+		return fmt.Errorf("missing --client_secret")
 	}
 	if c.mqttURL == "" {
 		return fmt.Errorf("missing --mqtt_url")

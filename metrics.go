@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -106,20 +107,9 @@ var (
 
 func init() {
 	// Register all metrics with the custom registry.
-	metricsRegistry.MustRegister(runsTotal)
-	metricsRegistry.MustRegister(runsSuccessTotal)
-	metricsRegistry.MustRegister(errorsTotal)
-	metricsRegistry.MustRegister(lastSuccessTimestamp)
-	metricsRegistry.MustRegister(lastRunTimestamp)
-	metricsRegistry.MustRegister(consecutiveFailures)
-	metricsRegistry.MustRegister(lastRunSuccess)
-	metricsRegistry.MustRegister(lastErrorTimestamp)
-	metricsRegistry.MustRegister(executionDuration)
-	metricsRegistry.MustRegister(tokenRefreshDuration)
-	metricsRegistry.MustRegister(usageFetchDuration)
-	metricsRegistry.MustRegister(mqttPublishDuration)
-	metricsRegistry.MustRegister(retriesTotal)
-	metricsRegistry.MustRegister(buildInfo)
+	metricsRegistry.MustRegister(runsTotal, runsSuccessTotal, errorsTotal, lastSuccessTimestamp,
+		lastRunTimestamp, consecutiveFailures, lastRunSuccess, lastErrorTimestamp, executionDuration,
+		tokenRefreshDuration, usageFetchDuration, mqttPublishDuration, retriesTotal, buildInfo)
 }
 
 // errorCategory represents an error category for metrics.
@@ -132,7 +122,6 @@ const (
 	errorCategoryUsageFetch       errorCategory = "usage_fetch"
 	errorCategoryUsageParse       errorCategory = "usage_parse"
 	errorCategoryMQTTPublish      errorCategory = "mqtt_publish"
-	errorCategoryMetricsPush      errorCategory = "metrics_push"
 )
 
 // recordError increments the error counter and updates the last error timestamp for a specific category.
@@ -167,7 +156,7 @@ func setBuildInfo(version, goVersion string) {
 
 // recordRetry increments the retry counter for a specific host, method, and status code.
 func recordRetry(host, method string, statusCode int) {
-	retriesTotal.WithLabelValues(host, method, fmt.Sprintf("%d", statusCode)).Inc()
+	retriesTotal.WithLabelValues(host, method, strconv.Itoa(statusCode)).Inc()
 }
 
 // pushMetrics pushes all metrics to the Prometheus Pushgateway.
