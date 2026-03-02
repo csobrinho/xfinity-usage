@@ -23,21 +23,21 @@ func mqttPublish(ctx context.Context, mqttURL, mqttUsername, mqttPassword, mqttC
 		SessionExpiryInterval:         10,
 		ConnectUsername:               mqttUsername,
 		ConnectPassword:               []byte(mqttPassword),
-		Debug:                         mqttLogger,
-		Errors:                        mqttLogger,
-		PahoDebug:                     mqttLogger,
-		PahoErrors:                    mqttLogger,
+		Debug:                         mqttLogger.AsDebug(),
+		Errors:                        mqttLogger.AsWarn(),
+		PahoDebug:                     mqttLogger.AsDebug(),
+		PahoErrors:                    mqttLogger.AsWarn(),
 	}
 	cfg.ClientConfig = paho.ClientConfig{
 		ClientID: mqttClientID,
 		OnClientError: func(err error) {
-			cfg.Errors.Printf("client error: %s", err)
+			mqttLogger.Warn("client error: %s", err)
 		},
 		OnServerDisconnect: func(d *paho.Disconnect) {
 			if d.Properties != nil {
-				cfg.Errors.Printf("server requested disconnect: %s", d.Properties.ReasonString)
+				mqttLogger.Info("server requested disconnect: %s", d.Properties.ReasonString)
 			} else {
-				cfg.Errors.Printf("server requested disconnect; reason code: %d", d.ReasonCode)
+				mqttLogger.Info("server requested disconnect; reason code: %d", d.ReasonCode)
 			}
 		},
 	}

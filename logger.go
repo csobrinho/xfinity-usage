@@ -47,7 +47,25 @@ func (l *logger) Debug(msg string, v ...any) {
 	log.V(1).Infof(l.prefix+msg+"%s", l.bindArgs(v...))
 }
 
+// AsDebug returns an mqtt Logger that routes to debug level.
+func (l *logger) AsDebug() *levelLogger {
+	return &levelLogger{prefix: l.prefix, fn: log.V(1).Infof}
+}
+
 // Satisfies the retryablehttp.LeveledLogger interface.
 func (l *logger) Warn(msg string, v ...any) {
 	log.Warningf(l.prefix+msg+"%s", l.bindArgs(v...))
 }
+
+// AsWarn returns an mqtt Logger that routes to warning level.
+func (l *logger) AsWarn() *levelLogger { return &levelLogger{prefix: l.prefix, fn: log.Warningf} }
+
+// levelLogger adapts a log function to the mqtt Logger interface.
+type levelLogger struct {
+	prefix string
+	fn     func(format string, v ...any)
+}
+
+func (ll *levelLogger) Println(v ...any) { ll.fn(ll.prefix+"%v", fmt.Sprint(v...)) }
+
+func (ll *levelLogger) Printf(format string, v ...any) { ll.fn(ll.prefix+format, v...) }
