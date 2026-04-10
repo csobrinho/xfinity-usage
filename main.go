@@ -139,6 +139,9 @@ func actionFetchUsageData(ctx context.Context, client *retryablehttp.Client, acc
 		return fmt.Errorf("failed to get internet usage in gb: %w", err)
 	}
 
+	if monthlyUsage.Policy == PolicyUnlimited {
+		log.Infof("main: policy %s", monthlyUsage.Policy)
+	}
 	log.Infof("main: usage %7.2f GB", cur)
 	if allowed, err := monthlyUsage.AllowableUsage.GB(); err == nil {
 		log.Infof("main: allowed %7.2f GB", allowed)
