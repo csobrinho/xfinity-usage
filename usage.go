@@ -48,9 +48,11 @@ type Usage struct {
 
 type InternetPlan struct {
 	Name          string      `json:"name,omitempty"`
-	DownloadSpeed *UsageValue `json:"downloadSpeed,omitempty"`
-	UploadSpeed   *UsageValue `json:"uploadSpeed,omitempty"`
+	DownloadSpeed *SpeedValue `json:"downloadSpeed,omitempty"`
+	UploadSpeed   *SpeedValue `json:"uploadSpeed,omitempty"`
 }
+
+const PolicyUnlimited = "unlimited"
 
 type UsageMonthly struct {
 	Policy               string     `json:"policy,omitempty"`
@@ -84,7 +86,26 @@ func (u UsageValue) GB() (float32, error) {
 	case "tb":
 		return *u.Value * 1000, nil
 	default:
-		return 0, fmt.Errorf("unknown %s unit", u.Unit)
+		return 0, fmt.Errorf("unknown usage %s unit", u.Unit)
+	}
+}
+
+type SpeedValue struct {
+	Value *float32 `json:"value,omitempty"`
+	Unit  string   `json:"unit,omitempty"`
+}
+
+func (u SpeedValue) Gbps() (float32, error) {
+	if u.Value == nil {
+		return 0, fmt.Errorf("no speed value")
+	}
+	switch strings.ToLower(u.Unit) {
+	case "mbps":
+		return *u.Value / 1000, nil
+	case "gbps":
+		return *u.Value, nil
+	default:
+		return 0, fmt.Errorf("unknown speed %s unit", u.Unit)
 	}
 }
 
@@ -120,6 +141,13 @@ func calculateEstimatedUsage(currentGB float32, startDate, endDate string) (floa
 	return estimatedUsage, dailyAverage
 }
 
+func valueIf[T any](cond bool, value T) *T {
+	if cond {
+		return &value
+	}
+	return nil
+}
+
 // ToAttributes converts the Usage data to UsageAttributes for MQTT publishing.
 func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 	// Validate usage data structure.
@@ -128,7 +156,9 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 		return nil, fmt.Errorf("invalid usage data structure")
 	}
 
-	monthlyUsage := u.Data.Account.Internet.Usage.MonthlyUsage[0]
+	internet := u.Data.Account.Internet
+	plan := internet.Plan
+	monthlyUsage := internet.Usage.MonthlyUsage[0]
 
 	// Get current and allowable usage in GB.
 	currentGB, err := monthlyUsage.CurrentUsage.GB()
@@ -148,6 +178,17 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 		}
 		return *p
 	}
+	safeSpeedValue := func(u *SpeedValue) *float32 {
+		if u == nil || u.Value == nil {
+			return nil
+		}
+		value, err := u.Gbps()
+		if err != nil {
+			log.Warningf("usage: failed to convert speed to gbps: %v", err)
+			return nil
+		}
+		return &value
+	}
 
 	// Extract optional fields with defaults.
 	overageCharge := intPtrToInt(monthlyUsage.OverageCharge)
@@ -166,6 +207,7 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 
 	// Calculate estimated usage and daily average.
 	usageEstimated, usageDailyAverage := calculateEstimatedUsage(currentGB, monthlyUsage.StartDate, monthlyUsage.EndDate)
+	notUnlimited := monthlyUsage.Policy != PolicyUnlimited
 
 	return &UsageAttributes{
 		FriendlyName:      "Xfinity Usage",
@@ -177,15 +219,18 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 		StartDate:            monthlyUsage.StartDate,
 		EndDate:              monthlyUsage.EndDate,
 		DaysRemaining:        intPtrToInt(monthlyUsage.DaysRemaining),
-		UsageRemaining:       usageRemaining,
+		UsageRemaining:       valueIf(notUnlimited, usageRemaining),
 		UsageEstimated:       usageEstimated,
 		UsageDailyAverage:    usageDailyAverage,
-		AllowableUsage:       int(allowableGB),
-		InPaidOverage:        inPaidOverage,
-		OverageCharges:       overageCharge,
-		OverageUsed:          overageUsed,
-		MaximumOverageCharge: maxOverageCharge,
+		AllowableUsage:       valueIf(notUnlimited, int(allowableGB)),
+		InPaidOverage:        valueIf(notUnlimited, inPaidOverage),
+		OverageCharges:       valueIf(notUnlimited, overageCharge),
+		OverageUsed:          valueIf(notUnlimited, overageUsed),
+		MaximumOverageCharge: valueIf(notUnlimited, maxOverageCharge),
 		Policy:               monthlyUsage.Policy,
+		PlanName:             plan.Name,
+		PlanDownloadSpeed:    safeSpeedValue(plan.DownloadSpeed),
+		PlanUploadSpeed:      safeSpeedValue(plan.UploadSpeed),
 	}, nil
 }
 
@@ -199,18 +244,21 @@ type UsageAttributes struct {
 	Icon              string `json:"icon"`
 
 	// Custom attributes below.
-	StartDate            string  `json:"start_date"`
-	EndDate              string  `json:"end_date"`
-	DaysRemaining        int     `json:"days_remaining"`
-	UsageRemaining       int     `json:"usage_remaining"`
-	UsageEstimated       float32 `json:"usage_estimated"`
-	UsageDailyAverage    float32 `json:"usage_daily_average"`
-	AllowableUsage       int     `json:"allowable_usage"`
-	InPaidOverage        bool    `json:"in_paid_overage"`
-	OverageCharges       int     `json:"overage_charges"`
-	OverageUsed          int     `json:"overage_used"`
-	MaximumOverageCharge int     `json:"maximum_overage_charge"`
-	Policy               string  `json:"policy"`
+	StartDate            string   `json:"start_date"`
+	EndDate              string   `json:"end_date"`
+	DaysRemaining        int      `json:"days_remaining"`
+	UsageRemaining       *int     `json:"usage_remaining,omitempty"`
+	UsageEstimated       float32  `json:"usage_estimated"`
+	UsageDailyAverage    float32  `json:"usage_daily_average"`
+	AllowableUsage       *int     `json:"allowable_usage,omitempty"`
+	InPaidOverage        *bool    `json:"in_paid_overage,omitempty"`
+	OverageCharges       *int     `json:"overage_charges,omitempty"`
+	OverageUsed          *int     `json:"overage_used,omitempty"`
+	MaximumOverageCharge *int     `json:"maximum_overage_charge,omitempty"`
+	Policy               string   `json:"policy"`
+	PlanName             string   `json:"plan_name,omitempty"`
+	PlanDownloadSpeed    *float32 `json:"plan_download_speed_gbps,omitempty"`
+	PlanUploadSpeed      *float32 `json:"plan_upload_speed_gbps,omitempty"`
 }
 
 func query(ctx context.Context, client *retryablehttp.Client, accessToken, idToken, url, method string, requestBody io.Reader, headers map[string]string) ([]byte, error) {
