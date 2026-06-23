@@ -27,6 +27,14 @@ var (
 	}
 )
 
+const (
+	attrFriendlyName      = "Xfinity Usage"
+	attrUnitOfMeasurement = "GB"
+	attrDeviceClass       = "data_size"
+	attrStateClass        = "measurement"
+	attrIcon              = "mdi:wan"
+)
+
 type Usage struct {
 	Data *struct {
 		Account *struct {
@@ -108,6 +116,17 @@ func (u SpeedValue) Gbps() (float32, error) {
 		return 0, fmt.Errorf("unknown speed %s unit", u.Unit)
 	}
 }
+func (u *SpeedValue) SafeGbps() *float32 {
+	if u == nil || u.Value == nil {
+		return nil
+	}
+	value, err := u.Gbps()
+	if err != nil {
+		log.Warningf("usage: failed to convert speed to gbps: %v", err)
+		return nil
+	}
+	return &value
+}
 
 // calculateEstimatedUsage calculates the estimated usage at the end of the billing period
 // based on current consumption rate. Returns (estimatedUsage, dailyAverage).
@@ -172,28 +191,6 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 	}
 	usageRemaining := max(int(allowableGB-currentGB), 0)
 
-	intPtrToInt := func(p *int) int {
-		if p == nil {
-			return 0
-		}
-		return *p
-	}
-	safeSpeedValue := func(u *SpeedValue) *float32 {
-		if u == nil || u.Value == nil {
-			return nil
-		}
-		value, err := u.Gbps()
-		if err != nil {
-			log.Warningf("usage: failed to convert speed to gbps: %v", err)
-			return nil
-		}
-		return &value
-	}
-
-	// Extract optional fields with defaults.
-	overageCharge := intPtrToInt(monthlyUsage.OverageCharge)
-	maxOverageCharge := intPtrToInt(monthlyUsage.MaximumOverageCharge)
-
 	var inPaidOverage bool
 	if u.Data.Account.Internet.Usage.InPaidOverage != nil {
 		inPaidOverage = *u.Data.Account.Internet.Usage.InPaidOverage
@@ -209,29 +206,38 @@ func (u *Usage) ToAttributes() (*UsageAttributes, error) {
 	usageEstimated, usageDailyAverage := calculateEstimatedUsage(currentGB, monthlyUsage.StartDate, monthlyUsage.EndDate)
 	notUnlimited := monthlyUsage.Policy != PolicyUnlimited
 
-	return &UsageAttributes{
-		FriendlyName:      "Xfinity Usage",
-		UnitOfMeasurement: "GB",
-		DeviceClass:       "data_size",
-		StateClass:        "measurement",
-		Icon:              "mdi:wan",
-		//
-		StartDate:            monthlyUsage.StartDate,
-		EndDate:              monthlyUsage.EndDate,
-		DaysRemaining:        intPtrToInt(monthlyUsage.DaysRemaining),
-		UsageRemaining:       valueIf(notUnlimited, usageRemaining),
-		UsageEstimated:       usageEstimated,
-		UsageDailyAverage:    usageDailyAverage,
-		AllowableUsage:       valueIf(notUnlimited, int(allowableGB)),
-		InPaidOverage:        valueIf(notUnlimited, inPaidOverage),
-		OverageCharges:       valueIf(notUnlimited, overageCharge),
-		OverageUsed:          valueIf(notUnlimited, overageUsed),
-		MaximumOverageCharge: valueIf(notUnlimited, maxOverageCharge),
-		Policy:               monthlyUsage.Policy,
-		PlanName:             plan.Name,
-		PlanDownloadSpeed:    safeSpeedValue(plan.DownloadSpeed),
-		PlanUploadSpeed:      safeSpeedValue(plan.UploadSpeed),
-	}, nil
+	attrs := &UsageAttributes{
+		FriendlyName:      attrFriendlyName,
+		UnitOfMeasurement: attrUnitOfMeasurement,
+		DeviceClass:       attrDeviceClass,
+		StateClass:        attrStateClass,
+		Icon:              attrIcon,
+		StartDate:         monthlyUsage.StartDate,
+		EndDate:           monthlyUsage.EndDate,
+		UsageEstimated:    usageEstimated,
+		UsageDailyAverage: usageDailyAverage,
+		Policy:            monthlyUsage.Policy,
+		PlanName:          "unknown",
+	}
+	if monthlyUsage.DaysRemaining != nil {
+		attrs.DaysRemaining = *monthlyUsage.DaysRemaining
+	}
+	if notUnlimited {
+		attrs.UsageRemaining = &usageRemaining
+		agb := int(allowableGB)
+		attrs.AllowableUsage = &agb
+		attrs.InPaidOverage = &inPaidOverage
+		attrs.OverageCharges = monthlyUsage.OverageCharge
+		attrs.OverageUsed = &overageUsed
+		attrs.MaximumOverageCharge = monthlyUsage.MaximumOverageCharge
+	}
+	if plan != nil {
+		attrs.PlanName = plan.Name
+		attrs.PlanDownloadSpeed = plan.DownloadSpeed.SafeGbps()
+		attrs.PlanUploadSpeed = plan.UploadSpeed.SafeGbps()
+	}
+
+	return attrs, nil
 }
 
 // UsageAttributes represents the usage data published to MQTT for Home Assistant.
