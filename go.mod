@@ -1,13 +1,13 @@
 module github.com/csobrinho/xfinity-usage
 
-go 1.25.4
+go 1.26.0
 
 require (
 	github.com/eclipse/paho.golang v0.23.0
 	github.com/google/logger v1.1.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/prometheus/client_golang v1.24.1
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (
